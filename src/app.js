@@ -186,7 +186,7 @@ function renderEmptyState(message) {
         <span class="badge warn">WAITING</span>
       </div>
       <div class="hint">${escapeHtml(
-        message || "You must start typing your solution in port_scanner.py and run: python main.py"
+        message || "You must start typing your solution in medical_data_visualizer.py and run: python main.py"
       )}</div>
     </div>
   `;
