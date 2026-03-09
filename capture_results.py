@@ -126,18 +126,16 @@ def _short_test_name(test_id: str) -> str:
     return test_id.split(".")[-1] if test_id else test_id
 
 
-def finish(test_program) -> None:
+def finish(test_program, runtime_error=None) -> None:
     """
     Call after unittest.main(..., exit=False) completes.
-    Uses the unittest result object (not fragile regex parsing).
-    Writes/updates result.json with challenge status + passed/failed + hints + stdout.
+    If a runtime error happens before/during test execution, mark challenge failed.
     """
     global _CAPTURE_BUF, _ORIG_STDOUT, _ORIG_STDERR
 
     hints = _extract_hints_from_test_module(TEST_MODULE_PATH)
     all_tests: List[str] = sorted(hints.keys())
 
-    # Get unittest result
     result = getattr(test_program, "result", None)
     failures = getattr(result, "failures", []) if result else []
     errors = getattr(result, "errors", []) if result else []
@@ -148,22 +146,26 @@ def finish(test_program) -> None:
     for test_case, _trace in errors:
         failed_names.add(_short_test_name(test_case.id()))
 
+    # If code crashed before tests completed, do NOT mark everything passed
+    if runtime_error is not None and not failed_names:
+        failed_names = set(all_tests)
+
     failed_names_sorted = sorted(failed_names)
     passed_names = [t for t in all_tests if t not in failed_names]
 
-    all_ok = bool(all_tests) and len(failed_names) == 0
+    all_ok = bool(all_tests) and len(failed_names) == 0 and runtime_error is None
 
     output = _CAPTURE_BUF.getvalue() if _CAPTURE_BUF else ""
 
     payload = {
-        "ok": True,                     # 1st key
-        "state": "done",                # 2nd key ✅
+        "ok": True,
+        "state": "done",
         "challenge": "passed" if all_ok else "failed",
         "tests": [
             {
                 "name": n,
                 "status": ("failed" if n in failed_names else "passed"),
-                "hint": hints.get(n, DEFAULT_HINT),   # always present
+                "hint": hints.get(n, DEFAULT_HINT),
             }
             for n in all_tests
         ],
@@ -178,7 +180,6 @@ def finish(test_program) -> None:
 
     _safe_write_json(RESULT_JSON_PATH, payload)
 
-    # restore streams
     try:
         sys.stdout = _ORIG_STDOUT
         sys.stderr = _ORIG_STDERR
